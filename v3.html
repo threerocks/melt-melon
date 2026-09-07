@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'none'; media-src data:">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#f5f2e8">
-  <title>软西瓜 · 果冻工坊 · 弹弹版</title>
+  <title>软西瓜 · 果冻工坊 · 动感版</title>
   <link rel="icon" href="data:,">
   <style>
 :root{--paper:#f5f2e8;--cream:#fffdf5;--ink:#244638;--muted:#738276;--line:#d3d9c8;--leaf:#426b47;--lime:#dbe98d;--coral:#ec7768;--serif:"Songti SC","STSong","Noto Serif CJK SC",serif;--sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif}
@@ -171,15 +171,15 @@
       Object.assign(this, { width, height, left, right, floor });
       // Speeds are px/s, gravity is px/s², damping is s⁻¹, frequencies are Hz.
       this.parameters = {
-        gravity: 1100, airDrag: 0.06, internalDamping: 1.5, liquidInternalDamping: 5,
-        shapeFrequency: 2.9, liquidShapeFrequency: 0.8,
-        edgeCompliance: 0.00012, bendCompliance: 0.0012,
+        gravity: 1100, airDrag: 0.06, internalDamping: 3.2, liquidInternalDamping: 5,
+        shapeFrequency: 2.6, liquidShapeFrequency: 0.8,
+        edgeCompliance: 0.00004, bendCompliance: 0.0003,
         liquidEdgeCompliance: 0.004, liquidBendCompliance: 0.025,
         restitution: 0.22, liquidRestitution: 0.055, maximumBounceHeightRatio: 0.55,
-        minimumRadiusRatio: 0.76, liquidMinimumRadiusRatio: 0.34, impactRadiusAllowance: 0.24,
-        floorImpactCompression: 0.52, liquidFloorImpactCompression: 0.82,
-        minimumBoundaryAreaRatio: 0.8, restingDrag: 20, restingInternalDamping: 16,
-        impactShapeRate: 4.0, impactThreshold: 80, impactCooldownSeconds: 0.1, impactDecay: 2.8,
+        minimumRadiusRatio: 0.76, liquidMinimumRadiusRatio: 0.34, impactRadiusAllowance: 0.18,
+        floorImpactCompression: 0.78, liquidFloorImpactCompression: 0.82,
+        minimumBoundaryAreaRatio: 0.8,
+        impactThreshold: 80, impactCooldownSeconds: 0.1, impactDecay: 5.5,
         maximumSpeed: 2400, ...parameters,
       };
       this.time = 0;
@@ -211,8 +211,8 @@
         initialRatio, growthSeconds: initialRatio < 1 ? Math.max(options.growthSeconds ?? 0.35, 0.15) : 0,
         currentRadius: initialRadius, inverseMass: 900 / (r * r),
         edgeLambdas: new Float64Array(POINT_COUNT), bendLambdas: new Float64Array(POINT_COUNT),
-        isSleeping: false, hasSupport: false, stillSeconds: 0, repairRecoverySeconds: 0, area: 0, targetArea: 0,
-        shapeImpulseA: 0, shapeImpulseB: 0, impactExcitation: 0, lastImpactSpeed: 0, floorBounceSpeed: 0, bounceX: 0, bounceY: 0,
+        isSleeping: false, stillSeconds: 0, repairRecoverySeconds: 0, area: 0, targetArea: 0,
+        impactExcitation: 0, lastImpactSpeed: 0, floorBounceSpeed: 0, bounceX: 0, bounceY: 0,
       };
       this.updateRestShape(body);
       this.updateGeometry(body);
@@ -254,16 +254,6 @@
         other.lastImpactSpeed = speed;
         this.wake(other);
       }
-      // A trace-free strain impulse compresses along the contact normal and expands
-      // across it. It changes real boundary velocities without translating the fruit.
-      const strainRate = this.parameters.impactShapeRate * excitation * (1 - this.lastLiquid) ** 2;
-      const excite = (fruit, participation) => {
-        participation *= Math.min(1, fruit.currentRadius / 48);
-        fruit.shapeImpulseA += (1 - 2 * normalX * normalX) * strainRate * participation;
-        fruit.shapeImpulseB += -2 * normalX * normalY * strainRate * participation;
-      };
-      excite(body, other ? Math.sqrt(other.r / (body.r + other.r)) : 1);
-      if (other) excite(other, Math.sqrt(body.r / (body.r + other.r)));
       this.impactEvents.push({ id: body.id, otherId: other?.id ?? null, x, y, normalX, normalY, speed });
       if (this.impactEvents.length > 64) this.impactEvents.shift();
       return true;
@@ -354,15 +344,14 @@
       if (anchorIndex) points.push(...points.splice(0, anchorIndex));
       body.edgeLambdas.fill(0); body.bendLambdas.fill(0);
       this.diagnostics.membraneRepairs++;
-      return true;
     }
 
     constrainBody(body, liquid) {
       this.repairFoldedMembrane(body);
       const points = body.points;
       // Membrane compliance can change without making the enclosed volume compressible.
-      const edgeAlpha = (this.parameters.edgeCompliance + liquid ** 2 * (this.parameters.liquidEdgeCompliance - this.parameters.edgeCompliance)) * (1 + (body.inverseMass - 1) * (1 - liquid)) / (FIXED_STEP ** 2);
-      const bendAlpha = (this.parameters.bendCompliance + liquid ** 2 * (this.parameters.liquidBendCompliance - this.parameters.bendCompliance)) * (1 + (body.inverseMass - 1) * (1 - liquid)) / (FIXED_STEP ** 2);
+      const edgeAlpha = (this.parameters.edgeCompliance + liquid ** 2 * (this.parameters.liquidEdgeCompliance - this.parameters.edgeCompliance)) / (FIXED_STEP ** 2);
+      const bendAlpha = (this.parameters.bendCompliance + liquid ** 2 * (this.parameters.liquidBendCompliance - this.parameters.bendCompliance)) / (FIXED_STEP ** 2);
       for (let index = 0; index < POINT_COUNT; index++) {
         this.constrainDistance(points[index], points[(index + 1) % POINT_COUNT], body.edgeLength, edgeAlpha, body.inverseMass, body.edgeLambdas, index, 1.3 + liquid * 0.94);
         this.constrainDistance(points[index], points[(index + 2) % POINT_COUNT], body.bendLength, bendAlpha, body.inverseMass, body.bendLambdas, index, 1.35 + liquid * 1.2);
@@ -387,7 +376,6 @@
       for (const point of points) {
         minimumX = Math.min(minimumX, point.x); maximumX = Math.max(maximumX, point.x); maximumY = Math.max(maximumY, point.y);
       }
-      if (maximumY >= this.floor - 1.05) body.hasSupport = true;
       if (maximumY > this.floor - 1 && body.frameVelocityY > 0) {
         const contactPoint = points.reduce((lowest, point) => point.y > lowest.y ? point : lowest, points[0]);
         if (this.registerImpact(body, null, 0, -1, body.frameVelocityY, contactPoint.x, this.floor - 1, body.id + ':floor')) {
@@ -397,7 +385,7 @@
       if (minimumX < this.left + 1 && body.frameVelocityX < 0) this.registerImpact(body, null, 1, 0, -body.frameVelocityX, this.left + 1, body.y, body.id + ':left');
       if (maximumX > this.right - 1 && body.frameVelocityX > 0) this.registerImpact(body, null, -1, 0, body.frameVelocityX, this.right - 1, body.y, body.id + ':right');
       // Impact temporarily redirects motion into the membrane; settled contacts remain firm.
-      let bulkResponse = (0.68 + liquid * 0.30) - (this.parameters.floorImpactCompression * Math.min(1, body.currentRadius / 28) + liquid * (this.parameters.liquidFloorImpactCompression - this.parameters.floorImpactCompression)) * body.impactExcitation;
+      let bulkResponse = 0.98 - (this.parameters.floorImpactCompression + liquid * (this.parameters.liquidFloorImpactCompression - this.parameters.floorImpactCompression)) * body.impactExcitation;
       const boundaryShiftX = Math.max(this.left + 1 - minimumX, 0) - Math.max(maximumX - this.right + 1, 0);
       const boundaryShiftY = -Math.max(maximumY - this.floor + 1, 0);
       if (boundaryShiftX || boundaryShiftY) {
@@ -432,25 +420,7 @@
         point.x = clamp(point.x, this.left + 1, this.right - 1);
         point.y = Math.min(point.y, this.floor - 1);
       }
-      if (this.repairFoldedMembrane(body)) {
-        // Reconnecting crossed samples can change area. Restore it before returning
-        // from the final boundary pass, then move the whole fruit inside the walls.
-        this.updateGeometry(body);
-        const areaScale = Math.max(1, body.targetArea * 0.96 / Math.max(body.area, 1));
-        const horizontalScale = Math.min(Math.sqrt(areaScale), (this.right - this.left - 2) / Math.max(body.maxX - body.minX, 1));
-        const verticalScale = areaScale / horizontalScale;
-        for (const point of points) {
-          point.x = body.x + (point.x - body.x) * horizontalScale;
-          point.y = body.y + (point.y - body.y) * verticalScale;
-        }
-        this.updateGeometry(body);
-        const repairShiftX = Math.max(this.left + 1 - body.minX, 0) - Math.max(body.maxX - this.right + 1, 0);
-        const repairShiftY = -Math.max(body.maxY - this.floor + 1, 0);
-        for (const point of points) {
-          point.x = clamp(point.x + repairShiftX, this.left + 1, this.right - 1);
-          point.y = Math.min(point.y + repairShiftY, this.floor - 1);
-        }
-      }
+      this.repairFoldedMembrane(body);
       for (const obstacle of this.obstacles) {
         if (body.maxX < obstacle.x - obstacle.r - 2 || body.minX > obstacle.x + obstacle.r + 2 || body.maxY < obstacle.y - obstacle.r - 2 || body.minY > obstacle.y + obstacle.r + 2) continue;
         // Resolve the complete edge, since clear vertices can still leave a chord inside a circle.
@@ -501,10 +471,8 @@
           }
         }
       }
-      if (normalY > 0.3) source.hasSupport = true;
-      if (normalY < -0.3) target.hasSupport = true;
       if (minimumOverlap <= 0) return true;
-      if (minimumOverlap > 0.55 || Math.hypot(source.vx - target.vx, source.vy - target.vy) > 18) {
+      if (minimumOverlap > 0.12 || Math.hypot(source.vx - target.vx, source.vy - target.vy) > 18) {
         if (source.isSleeping) this.wake(source);
         if (target.isSleeping) this.wake(target);
       }
@@ -538,11 +506,8 @@
         }
       }
       const excitation = isBirthRepair ? 0 : Math.max(source.impactExcitation, target.impactExcitation);
-      const elasticShare = 1 - this.lastLiquid;
-      const areaAllowance = clamp((Math.min(source.area / source.targetArea, target.area / target.targetArea) - 0.82) / 0.18, 0, 1);
-      const maximumLocalDeflection = Math.min(source.currentRadius, target.currentRadius) * (0.02 + excitation * 0.2 + elasticShare * (0.06 + excitation * 0.14)) * areaAllowance;
-      const localFraction = 0.12 + excitation * 0.62 + elasticShare * (0.26 - excitation * 0.12);
-      const bulkSeparation = isBirthRepair ? minimumOverlap : minimumOverlap - Math.min(minimumOverlap * localFraction, maximumLocalDeflection);
+      const maximumLocalDeflection = Math.min(source.currentRadius, target.currentRadius) * (0.02 + excitation * 0.2);
+      const bulkSeparation = minimumOverlap - Math.min(minimumOverlap * (0.12 + excitation * 0.62), maximumLocalDeflection);
       const sourceShift = bulkSeparation * sourceMass / (sourceMass + targetMass);
       const targetShift = bulkSeparation * targetMass / (sourceMass + targetMass);
       if (sourceMass) for (const point of source.points) {
@@ -568,7 +533,6 @@
         point.x += normalX * penetration; point.y += normalY * penetration;
         if (isBirthRepair) { point.repairX += normalX * penetration; point.repairY += normalY * penetration; }
       }
-      this.updateGeometry(source); this.updateGeometry(target);
       return true;
     }
 
@@ -587,8 +551,7 @@
         const airRetention = Math.exp(-this.parameters.airDrag * FIXED_STEP);
         for (const body of this.bodies) {
           body.age += FIXED_STEP;
-          body.hasSupport = false;
-          body.impactExcitation *= Math.exp(-(this.parameters.impactDecay + liquid * (5.5 - this.parameters.impactDecay)) * FIXED_STEP);
+          body.impactExcitation *= Math.exp(-this.parameters.impactDecay * FIXED_STEP);
           body.floorBounceSpeed = 0; body.bounceX = 0; body.bounceY = 0;
           body.isPlacementRepair = false;
           body.repairRecoverySeconds = Math.max(0, body.repairRecoverySeconds - FIXED_STEP);
@@ -650,28 +613,8 @@
             for (const point of body.points) { point.vx += body.bounceX; point.vy += body.bounceY + reboundY; }
             body.vx += body.bounceX; body.vy += body.bounceY + reboundY;
           }
-          if (body.shapeImpulseA || body.shapeImpulseB) {
-            this.updateGeometry(body);
-            const strainMagnitude = Math.hypot(body.shapeImpulseA, body.shapeImpulseB);
-            const strainLimit = Math.min(1, this.parameters.impactShapeRate / strainMagnitude);
-            const strainA = body.shapeImpulseA * strainLimit, strainB = body.shapeImpulseB * strainLimit;
-            for (const point of body.points) {
-              const dx = point.x - body.x, dy = point.y - body.y;
-              point.vx += strainA * dx + strainB * dy;
-              point.vy += strainB * dx - strainA * dy;
-            }
-            body.shapeImpulseA = 0; body.shapeImpulseB = 0;
-          }
-          // Let visible impact oscillations finish, then damp tiny supported motion.
-          const isSettling = body.hasSupport && liquid < 0.01 && Math.abs(tilt) < 0.01 && body.impactExcitation < 0.012 && Math.hypot(body.vx, body.vy) < 40;
-          if (isSettling) {
-            const retention = Math.exp(-this.parameters.restingDrag * FIXED_STEP);
-            const shiftX = body.vx * (retention - 1), shiftY = body.vy * (retention - 1);
-            body.vx += shiftX; body.vy += shiftY;
-            for (const point of body.points) { point.vx += shiftX; point.vy += shiftY; }
-          }
           let internalSpeedSquared = 0;
-          const dampingRate = isSettling ? this.parameters.restingInternalDamping : this.parameters.internalDamping + liquid * (this.parameters.liquidInternalDamping - this.parameters.internalDamping);
+          const dampingRate = this.parameters.internalDamping + liquid * (this.parameters.liquidInternalDamping - this.parameters.internalDamping);
           const damping = Math.exp(-dampingRate * FIXED_STEP);
           for (const point of body.points) {
             point.vx = body.vx + (point.vx - body.vx) * damping;
@@ -679,9 +622,9 @@
             internalSpeedSquared += (point.vx - body.vx) ** 2 + (point.vy - body.vy) ** 2;
           }
           this.updateGeometry(body);
-          if (body.age > body.growthSeconds + 0.5 && body.hasSupport && liquid < 0.01 && Math.abs(tilt) < 0.01 && body.impactExcitation < 0.012 && Math.hypot(body.vx, body.vy) < 5 && internalSpeedSquared / POINT_COUNT < 36 && Math.abs(body.area / body.targetArea - 1) < 0.035) body.stillSeconds += FIXED_STEP;
+          if (body.age > body.growthSeconds + 0.5 && body.impactExcitation < 0.02 && Math.hypot(body.vx, body.vy) < 1.5 && internalSpeedSquared / POINT_COUNT < 2.25 && Math.abs(body.area / body.targetArea - 1) < 0.035) body.stillSeconds += FIXED_STEP;
           else body.stillSeconds = 0;
-          if (body.stillSeconds > 0.65) {
+          if (body.stillSeconds > 0.9) {
             body.isSleeping = true; body.vx = 0; body.vy = 0;
             for (const point of body.points) { point.vx = 0; point.vy = 0; }
           }
