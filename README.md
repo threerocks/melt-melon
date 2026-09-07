@@ -12,7 +12,7 @@
 
 ## 游玩
 
-[打开 V6](https://threerocks.github.io/melt-melon/?v=6) · [V5](https://threerocks.github.io/melt-melon/v5.html) · [V4 解压版](https://threerocks.github.io/melt-melon/v4.html) · [V3](https://threerocks.github.io/melt-melon/v3.html)
+[开始游戏](https://threerocks.github.io/melt-melon)
 
 下载后打开 `index.html` 也可离线游玩。
 
