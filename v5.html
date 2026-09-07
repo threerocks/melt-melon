@@ -165,7 +165,7 @@
   </div>
 </dialog>
 
-  <details id="qa-panel" hidden><summary>验证记录</summary><div class="qa-controls"><button id="qa-stress">40 果实压力场景</button><button id="qa-bubbles">大水果气泡外膜</button><button id="qa-autoplay">连续中间投放</button><button id="qa-end">查看结束画面</button><button id="qa-win">查看西瓜画面</button></div><pre id="diagnostics"></pre></details>
+  <details id="qa-panel" hidden><summary>验证记录</summary><div class="qa-controls"><button id="qa-stress">40 果实压力场景</button><button id="qa-autoplay">连续中间投放</button><button id="qa-end">查看结束画面</button><button id="qa-win">查看西瓜画面</button></div><pre id="diagnostics"></pre></details>
   <script>
 (function () {
   'use strict';
@@ -195,7 +195,7 @@
         restitution: 0.22, liquidRestitution: 0.055, maximumBounceHeightRatio: 0.55,
         minimumRadiusRatio: 0.76, liquidMinimumRadiusRatio: 0.34, impactRadiusAllowance: 0.24,
         floorImpactCompression: 0.52, liquidFloorImpactCompression: 0.82,
-        packingRadiusRatio: 0.96, contactFriction: 0.55, minimumBoundaryAreaRatio: 0.8, restingDrag: 20, restingInternalDamping: 16,
+        packingRadiusRatio: 0.96, minimumBoundaryAreaRatio: 0.8, restingDrag: 20, restingInternalDamping: 16,
         impactShapeRate: 4.0, impactThreshold: 80, impactCooldownSeconds: 0.1, impactDecay: 2.8,
         maximumSpeed: 2400, ...parameters,
       };
@@ -224,7 +224,7 @@
         return { x: x + Math.cos(angle) * initialRadius, y: y + Math.sin(angle) * initialRadius, vx: velocityX, vy: velocityY, oldX: 0, oldY: 0 };
       });
       const body = {
-        id: this.nextId++, level, r, x, y, stepStartX: x, stepStartY: y, vx: velocityX, vy: velocityY, age: 0, points,
+        id: this.nextId++, level, r, x, y, vx: velocityX, vy: velocityY, age: 0, points,
         initialRatio, growthSeconds: initialRatio < 1 ? Math.max(options.growthSeconds ?? 0.35, 0.15) : 0,
         currentRadius: initialRadius, inverseMass: 900 / (r * r),
         edgeLambdas: new Float64Array(POINT_COUNT), bendLambdas: new Float64Array(POINT_COUNT),
@@ -606,23 +606,12 @@
       const bulkSeparation = isBirthRepair ? minimumOverlap : minimumOverlap - Math.min(minimumOverlap * localFraction, maximumLocalDeflection);
       const sourceShift = bulkSeparation * sourceMass / (sourceMass + targetMass);
       const targetShift = bulkSeparation * targetMass / (sourceMass + targetMass);
-      const tangentX = -normalY, tangentY = normalX;
-      let frictionDisplacement = 0;
-      if (!isBirthRepair && this.parameters.contactFriction > 0) {
-        const relativeX = target.x - target.stepStartX - source.x + source.stepStartX;
-        const relativeY = target.y - target.stepStartY - source.y + source.stepStartY;
-        const supportDisplacement = this.parameters.gravity * FIXED_STEP ** 2 * Math.abs(normalY);
-        const frictionLimit = this.parameters.contactFriction * (1 - this.lastLiquid) * (minimumOverlap + supportDisplacement);
-        frictionDisplacement = clamp(relativeX * tangentX + relativeY * tangentY, -frictionLimit, frictionLimit);
-      }
-      const sourceFriction = frictionDisplacement * sourceMass / (sourceMass + targetMass);
-      const targetFriction = frictionDisplacement * targetMass / (sourceMass + targetMass);
       if (sourceMass) for (const point of source.points) {
-        point.x += -normalX * sourceShift + tangentX * sourceFriction; point.y += -normalY * sourceShift + tangentY * sourceFriction;
+        point.x -= normalX * sourceShift; point.y -= normalY * sourceShift;
         if (isBirthRepair) { point.repairX -= normalX * sourceShift; point.repairY -= normalY * sourceShift; }
       }
       if (targetMass) for (const point of target.points) {
-        point.x += normalX * targetShift - tangentX * targetFriction; point.y += normalY * targetShift - tangentY * targetFriction;
+        point.x += normalX * targetShift; point.y += normalY * targetShift;
         if (isBirthRepair) { point.repairX += normalX * targetShift; point.repairY += normalY * targetShift; }
       }
       let sourceSupport = -Infinity, targetSupport = Infinity;
@@ -658,7 +647,6 @@
         this.time += FIXED_STEP;
         const airRetention = Math.exp(-this.parameters.airDrag * FIXED_STEP);
         for (const body of this.bodies) {
-          body.stepStartX = body.x; body.stepStartY = body.y;
           body.age += FIXED_STEP;
           body.hasSupport = false;
           body.impactExcitation *= Math.exp(-(this.parameters.impactDecay + liquid * (5.5 - this.parameters.impactDecay)) * FIXED_STEP);
@@ -802,17 +790,7 @@
       this.events = [];
       this.pendingMerges = [];
       this.state = { time: 0, score: 0, energy: 60, currentLevel: this.nextLevel(), nextLevel: this.nextLevel(), aimX: this.options.width / 2, cooldownSeconds: 0, liquid: 0, liquidRemainingSeconds: 0, tilt: 0, dangerSeconds: 0, combo: 0, mergeCount: 0, dropCount: 0, highestLevel: 0, isPaused: false, isOver: false, hasWatermelon: false, lastMergeTime: -Infinity };
-      if (this.options.initialFruit !== false) this.placeInitialFruit();
       this.emit('reset', { seed: this.initialSeed });
-    }
-
-    placeInitialFruit() {
-      const availableWidth = this.options.right - this.options.left;
-      for (const [level, fraction] of [[1, .13], [3, .35], [0, .59], [2, .81]]) {
-        const radius = this.options.radii[level];
-        this.world.add(level, this.options.left + availableWidth * fraction, this.options.floor - radius - 1, radius);
-        this.state.highestLevel = Math.max(this.state.highestLevel, level);
-      }
     }
 
     emit(type, details = {}) {
@@ -908,13 +886,13 @@
       this.world.remove([first.id, second.id]);
       let mergedId = null;
       if (level < this.options.radii.length) {
-        const merged = this.world.add(level, x, y, this.options.radii[level], { vx, vy, growFrom: this.options.mergeGrowFrom ?? 1, growthSeconds: .18 });
+        const merged = this.world.add(level, x, y, this.options.radii[level], { vx, vy, growFrom: .78, growthSeconds: .18 });
         mergedId = merged.id;
         this.state.highestLevel = Math.max(this.state.highestLevel, level);
       }
       this.state.combo = this.state.time - this.state.lastMergeTime < 1.2 ? this.state.combo + 1 : 1;
       this.state.lastMergeTime = this.state.time;
-      const points = level * (level + 1) / 2;
+      const points = 10 * 2 ** level * Math.min(this.state.combo, 5);
       this.state.score += points;
       this.state.mergeCount++;
       this.state.energy = Math.min(100, this.state.energy + this.options.energyPerMerge);
@@ -1189,37 +1167,15 @@
       try {
         const pixels = cellContext.getImageData(0, 0, cellWidth, cellHeight).data;
         let coveredPixels = 0;
-        let largestComponentSize = 0;
-        const visited = new Uint8Array(cellWidth * cellHeight);
-        const queue = new Int32Array(cellWidth * cellHeight);
-        for (let start = 0; start < visited.length; start++) {
-          if (visited[start] || pixels[start * 4 + 3] <= 32) continue;
-          let head = 0, tail = 1;
-          let componentLeft = cellWidth, componentTop = cellHeight, componentRight = -1, componentBottom = -1;
-          queue[0] = start; visited[start] = 1;
-          while (head < tail) {
-            const pixelIndex = queue[head++];
-            const x = pixelIndex % cellWidth, y = Math.floor(pixelIndex / cellWidth);
-            componentLeft = Math.min(componentLeft, x); componentRight = Math.max(componentRight, x);
-            componentTop = Math.min(componentTop, y); componentBottom = Math.max(componentBottom, y);
-            for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
-              const nextX = x + dx, nextY = y + dy;
-              if (nextX < 0 || nextY < 0 || nextX >= cellWidth || nextY >= cellHeight) continue;
-              const next = nextY * cellWidth + nextX;
-              if (visited[next] || pixels[next * 4 + 3] <= 32) continue;
-              visited[next] = 1; queue[tail++] = next;
-            }
-          }
-          coveredPixels += tail;
-          if (tail > largestComponentSize) {
-            largestComponentSize = tail;
-            left = componentLeft; right = componentRight; top = componentTop; bottom = componentBottom;
+        for (let y = 0; y < cellHeight; y++) {
+          for (let x = 0; x < cellWidth; x++) {
+            if (pixels[(y * cellWidth + x) * 4 + 3] <= 12) continue;
+            coveredPixels++;
+            left = Math.min(left, x); right = Math.max(right, x);
+            top = Math.min(top, y); bottom = Math.max(bottom, y);
           }
         }
         if (right < left || bottom < top) return null;
-        // Tiny pieces from a neighboring atlas row must not enlarge this fruit's crop.
-        left = Math.max(0, left - 2); top = Math.max(0, top - 2);
-        right = Math.min(cellWidth - 1, right + 2); bottom = Math.min(cellHeight - 1, bottom + 2);
         if (coveredPixels > cellWidth * cellHeight * 0.96) {
           this.assetWarnings.push(`图集第 ${level + 1} 格几乎没有透明边缘。`);
         }
@@ -1235,7 +1191,7 @@
       const spriteContext = sprite.getContext('2d');
       const scale = SPRITE_SIZE / cropSide;
       // Draw an isolated cell: square padding cannot accidentally include a neighboring fruit.
-      spriteContext.drawImage(cell, left, top, right - left + 1, bottom - top + 1, (left - cropLeft) * scale, (top - cropTop) * scale, (right - left + 1) * scale, (bottom - top + 1) * scale);
+      spriteContext.drawImage(cell, -cropLeft * scale, -cropTop * scale, cellWidth * scale, cellHeight * scale);
       return sprite;
     }
 
@@ -1336,13 +1292,17 @@
       const coordinates = new Float64Array(shape.coordinates);
       const color = FRUIT_COLORS[level];
       traceOutline(context, coordinates);
-      // Transparent sprite margins reveal this membrane, so it must remain light.
-      const bubbleFill = context.createRadialGradient(0, 0, shape.radius * .65, 0, 0, shape.radius * 1.1);
-      bubbleFill.addColorStop(0, '#ffffff00');
-      bubbleFill.addColorStop(.72, color + '0c');
-      bubbleFill.addColorStop(1, '#ffffff38');
-      context.fillStyle = bubbleFill;
+      context.shadowColor = '#263c2226';
+      context.shadowOffsetY = Math.max(1, shape.radius * 0.025);
+      context.shadowBlur = 0;
+      const jellyFill = context.createRadialGradient(-shape.radius * .4, -shape.radius * .45, 0, 0, 0, shape.radius * 1.25);
+      jellyFill.addColorStop(0, '#fff4de');
+      jellyFill.addColorStop(.4, color);
+      jellyFill.addColorStop(1, '#39432c');
+      context.fillStyle = jellyFill;
       context.fill();
+      context.shadowBlur = 0;
+      context.shadowOffsetY = 0;
       context.save();
       traceOutline(context, coordinates);
       context.clip();
@@ -1357,16 +1317,16 @@
       } else {
         this.paintFallback(context, shape, color);
       }
+      const lowerShade = context.createLinearGradient(0, shape.top, 0, shape.bottom);
+      lowerShade.addColorStop(0, '#ffffff00');
+      lowerShade.addColorStop(0.63, '#243b2100');
+      lowerShade.addColorStop(1, '#243b2126');
+      context.fillStyle = lowerShade;
+      context.fillRect(shape.left - 1, shape.top - 1, width, height);
       context.restore();
       traceOutline(context, coordinates);
-      const bubbleRim = context.createLinearGradient(shape.left, shape.top, shape.right, shape.bottom);
-      bubbleRim.addColorStop(0, '#ffffffed');
-      bubbleRim.addColorStop(.35, '#ffffff32');
-      bubbleRim.addColorStop(.64, '#b0dbc332');
-      bubbleRim.addColorStop(.88, '#ffffffcc');
-      bubbleRim.addColorStop(1, '#ffffff55');
-      context.strokeStyle = bubbleRim;
-      context.lineWidth = clamp(shape.radius * 0.014, 0.65, 1.35);
+      context.strokeStyle = '#fff8dd60';
+      context.lineWidth = clamp(shape.radius * 0.018, 0.65, 1.4);
       context.stroke();
       this.diagnostics.textureRebuilds++;
       return { canvas, level, coordinates, pixelRatio, left, top, bytes: canvas.width * canvas.height * 4 };
@@ -1423,7 +1383,7 @@
       const fill = context.createRadialGradient(-shape.radius * 0.3, -shape.radius * 0.4, 0, 0, 0, shape.radius * 1.5);
       fill.addColorStop(0, '#fff4d4');
       fill.addColorStop(0.38, color);
-      fill.addColorStop(1, color + '55');
+      fill.addColorStop(1, '#56644b');
       context.fillStyle = fill;
       context.fillRect(shape.left - 2, shape.top - 2, shape.right - shape.left + 4, shape.bottom - shape.top + 4);
     }
@@ -1953,7 +1913,7 @@
       sceneName = Object.hasOwn(SCENES, nextScene) ? nextScene : 'drop';
       sceneGame = null;
       if (sceneName === 'merge') {
-        sceneGame = new MelonGame({ width: WIDTH, height: HEIGHT, seed: 2743, initialFruit: false });
+        sceneGame = new MelonGame({ width: WIDTH, height: HEIGHT, seed: 2743 });
         world = sceneGame.world;
         const level = 3, radius = sceneGame.options.radii[level];
         world.add(level, 230, world.floor - radius - 1, radius);
@@ -2145,7 +2105,7 @@ window.MELON_ATLAS='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABagAAAQ+CAYAAA
 (function () {
   'use strict';
   const { names: FRUIT_NAMES, colors: FRUIT_COLORS, finalLevel: FINAL_LEVEL, logoLevel: LOGO_LEVEL } = MelonFruitCatalog;
-  const STORAGE_KEY = 'soft-melon-club-v6';
+  const STORAGE_KEY = 'soft-melon-club-v5';
   const byId = id => document.getElementById(id);
   const query = new URLSearchParams(location.search);
   const isQa = query.has('qa');
@@ -2244,8 +2204,6 @@ window.MELON_ATLAS='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABagAAAQ+CAYAAA
     pendingLessonTime = pendingWinTime = null; isStressScene = false; qaAutoplay = false; qaNextDropAt = 0;
     tutorialStage = saved.learned || tutorialStage === 'complete' ? 'complete' : 'drop';
     game.reset((Number(query.get('seed')) || Date.now()) >>> 0);
-    eventHistory.length = 0;
-    say('新的一局，先看看已有水果的位置。');
     game.takeEvents(); game.world.takeImpactEvents(); painter.clearCache();
     lastNextLevel = lastHighestLevel = -1; transientUntil = 0;
     if (!hasLoadedArt) game.setPaused(true);
@@ -2372,7 +2330,7 @@ window.MELON_ATLAS='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABagAAAQ+CAYAAA
   function updateHud() {
     const state = game.state;
     byId('score').textContent = state.score.toLocaleString('zh-CN'); byId('best').textContent = bestScore.toLocaleString('zh-CN');
-    byId('combo').textContent = state.combo > 1 && state.time - state.lastMergeTime < 1.15 ? `连续合成 ${state.combo} 次` : '';
+    byId('combo').textContent = state.combo > 1 && state.time - state.lastMergeTime < 1.15 ? `×${state.combo} 连着合成` : '';
     for (const id of ['tilt-left', 'tilt-right']) byId(id).disabled = !hasLoadedArt || state.isPaused || state.isOver || state.energy < .2;
     byId('energy').value = state.energy; byId('energy-value').textContent = Math.floor(state.energy);
     const isSoftening = state.liquidRemainingSeconds > 0, canAfford = state.energy >= game.options.softenCost;
@@ -2563,11 +2521,6 @@ window.MELON_ATLAS='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABagAAAQ+CAYAAA
       finishTutorial(); startRound(); game.world.clear(); game.state.currentLevel = game.state.nextLevel = 0;
       for (let index = 0; index < 40; index++) { const column = index % 5, row = Math.floor(index / 5), level = (column + row * 2) % 5; game.world.add(level, 70 + column * 80 + (row % 2 ? 2 : -2), 570 - row * 76, 20 + level * 4); }
       isStressScene = true; frameIntervals.length = frameCosts.length = 0; flashMessage('40 颗水果 · 渲染压力场景', 4);
-    };
-    byId('qa-bubbles').onclick = () => {
-      finishTutorial(); startRound(); game.world.clear();
-      for (const [level, x, y] of [[7, 108, 539], [8, 325, 521], [5, 180, 373], [4, 300, 378]]) game.world.add(level, x, y, game.options.radii[level]);
-      isStressScene = true; flashMessage('检查透明外膜 · 桃子、椰子、苹果、柠檬', 4);
     };
     byId('qa-autoplay').onclick = () => { finishTutorial(); startRound(); qaAutoplay = true; frameIntervals.length = frameCosts.length = 0; };
     byId('qa-end').onclick = () => showResult(false); byId('qa-win').onclick = () => showResult(true);

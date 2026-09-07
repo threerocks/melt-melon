@@ -2,15 +2,17 @@
 
 水果软体合成小游戏，使用原生 Canvas，全部资源内嵌在一个 HTML 文件中。
 
-当前版本：V5。保留果冻碰撞的压缩、回弹和余晃，把合成链扩展为十一级。空池开局，下一颗随机来自前五级。大水果之间会留下缝隙；西瓜留在池中，不再合并消除。
+当前版本：V6。水果外围使用透明浅色膜和细高光。开局预放四颗水果，保留十一级合成链和前五级等概率出果。
 
-揉软和倾斜共用果汁能量：揉软消耗 60，倾斜每秒消耗 10，每次合成补充 2。新版最高纪录单独保存。
+水果之间增加切向摩擦，减少堆积后的自动滑动；揉软时释放这部分摩擦。合成结果直接以完整大小参与碰撞。单果碰撞的压缩、回弹和余晃继续保留。
 
-绘图复用纹理画布，及时释放已经合成的水果缓存，并按实际显示尺寸分配画布像素。小水果简化内部纹理绘制，碰撞和外轮廓继续使用真实软体节点。
+揉软消耗 60 能量，倾斜每秒消耗 10，每次合成补充 2。西瓜留在池中，不再合并消除。分数按合成等级逐级增加，连击保留提示和音效，不再放大分数；V6 最高纪录单独保存。
+
+绘图复用纹理画布，释放已合成水果的缓存，并按显示尺寸分配画布像素。小水果简化内部纹理绘制，碰撞和外轮廓继续使用软体节点。
 
 ## 游玩
 
-[打开 V5](https://threerocks.github.io/melt-melon/?v=5) · [V4 解压版](https://threerocks.github.io/melt-melon/v4.html) · [V3](https://threerocks.github.io/melt-melon/v3.html)
+[打开 V6](https://threerocks.github.io/melt-melon/?v=6) · [V5](https://threerocks.github.io/melt-melon/v5.html) · [V4 解压版](https://threerocks.github.io/melt-melon/v4.html) · [V3](https://threerocks.github.io/melt-melon/v3.html)
 
 下载后打开 `index.html` 也可离线游玩。
 
